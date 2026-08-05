@@ -15,6 +15,11 @@ for provenance and is never imported by the repaired application.
 > This is a portfolio and research baseline. It is not a certified safety system and
 > must not be the sole basis for emergency response or hazardous-material handling.
 
+![Synthetic crisis-scene demo](docs/assets/demo-preview.jpg)
+
+_Generated integration scene with two stable barrel tracks and one validated placard
+track. This is not operational footage._
+
 ## Demonstrated engineering
 
 - resolution-independent red/blue barrel rules with inspectable measurements
