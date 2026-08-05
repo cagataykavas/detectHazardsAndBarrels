@@ -1,0 +1,15 @@
+{
+  "barrel_min_area_ratio": 0.006,
+  "barrel_max_area_ratio": 0.12,
+  "barrel_min_aspect_ratio": 0.2,
+  "barrel_max_aspect_ratio": 0.85,
+  "placard_ratio_test": 0.72,
+  "placard_min_matches": 12,
+  "placard_ransac_threshold": 5.0,
+  "placard_min_inlier_ratio": 0.55,
+  "placard_min_area_ratio": 0.001,
+  "placard_max_area_ratio": 0.35,
+  "track_max_distance": 0.18,
+  "track_max_missing": 8,
+  "frame_stride": 1
+}
