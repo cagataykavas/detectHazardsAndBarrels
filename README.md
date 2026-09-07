@@ -1,58 +1,75 @@
-# Crisis Vision Lab
+# Crisis Vision Lab — Hazard Sign & Barrel Detection / Tracking
 
 [![CI](https://github.com/cagataykavas/detectHazardsAndBarrels/actions/workflows/ci.yml/badge.svg)](https://github.com/cagataykavas/detectHazardsAndBarrels/actions/workflows/ci.yml)
 
-An explainable computer-vision baseline for detecting hazardous-material placards
-and colored barrels in crisis-scene video. It combines scale-aware HSV segmentation,
-SIFT feature matching, RANSAC homography validation, centroid tracking, and a
-versioned JSONL output contract.
+An explainable classical computer-vision pipeline for detecting hazardous-material placards and colored barrels in crisis-scene video. The repaired application packages the original academic prototype into a reproducible, headless pipeline with typed configuration, tracking, versioned JSONL evidence, tests, CI, and a deterministic generated demo.
 
-The repository includes a deterministic generated scene, so a new contributor can
-exercise the whole system without downloading private footage. The original
-university prototype remains in [`legacy/HW1_monolith.py`](legacy/HW1_monolith.py)
-for provenance and is never imported by the repaired application.
+The core techniques remain intentionally classical: **SIFT feature matching, Lowe ratio filtering, RANSAC homography validation, HSV segmentation, morphology, contour analysis, and centroid-based temporal association**. This repository is useful precisely because those stages are visible and inspectable rather than hidden behind a pretrained detector.
 
-> This is a portfolio and research baseline. It is not a certified safety system and
-> must not be the sole basis for emergency response or hazardous-material handling.
+> This is a portfolio/research baseline, not a certified safety system. It must not be the sole basis for emergency response or hazardous-material handling.
 
 ![Synthetic crisis-scene demo](docs/assets/demo-preview.jpg)
 
-_Generated integration scene with two stable barrel tracks and one validated placard
-track. This is not operational footage._
+_The preview is generated integration data, not operational footage._
 
-## Demonstrated engineering
+## Provenance
 
-- resolution-independent red/blue barrel rules with inspectable measurements
-- SIFT + Lowe ratio matching and RANSAC inlier validation for placards
-- geometric rejection of implausible or non-convex homographies
-- semantic track IDs with explicit first-seen and association evidence
-- headless video processing with annotated MP4, preview, JSONL, and summary outputs
-- generated integration demo, typed configuration, unit tests, linting, and CI
+The project began as a university assignment implemented in one large `HW1.py`. The original behavior is preserved in `legacy/HW1_monolith.py` together with the historical assignment notes. The runnable application does **not** import the legacy monolith; it re-expresses the same problem as testable modules.
 
-Confidence values are heuristic ranking scores, not calibrated probabilities.
-Detection counts are observations, not precision/recall.
+This matters because several thresholds in the original project were tuned for assignment footage rather than calibrated as universal detection rules. The modernized pipeline makes those assumptions explicit instead of presenting them as production-grade probabilities.
+
+## What the repaired pipeline does
+
+1. Loads HAZMAT reference templates and extracts SIFT descriptors.
+2. Reads video frames through a headless processing pipeline.
+3. Matches scene descriptors to templates using Lowe's ratio criterion.
+4. Estimates a homography with RANSAC and rejects weak or implausible geometry.
+5. Detects red and blue barrels with scale-aware HSV masks, morphology, and contours.
+6. Associates detections across frames with lightweight centroid tracking.
+7. Emits per-frame JSONL records containing geometry, track IDs, scores, and decision evidence.
+8. Writes an annotated video, preview frame, and machine-readable summary.
+
+Confidence values are heuristic ranking scores, **not calibrated probabilities**. Detection counts are observations, **not precision/recall**.
+
+## Engineering surface
+
+```text
+crisis_vision/
+  cli.py          command-line interface
+  config.py       typed/validated configuration
+  detection.py    barrel + placard detection primitives
+  tracking.py     temporal centroid association
+  pipeline.py     video orchestration and artifact writing
+  models.py       result/evidence data contracts
+  templates.py    reference-template loading
+  demo.py         deterministic synthetic integration scene
+legacy/
+  HW1_monolith.py preserved original academic implementation
+tests/            detection, tracking, config and pipeline regression tests
+docs/             architecture, JSON contract and evaluation guidance
+```
 
 ## Quick start
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 
-# Creates a scene with two barrels and a moving placard.
+# Zero-private-data integration path
 crisis-vision demo --output artifacts/demo --frames 48
 
-# Processes a real recording with the bundled template directory.
+# Analyze a recording
 crisis-vision analyze \
   --input video.mp4 \
   --templates hazmats/hazmats \
   --output artifacts/incident
 
-# Prints the event contract.
+# Inspect the output contract
 crisis-vision explain-schema
 ```
 
-The historical filename remains a compatibility entry point:
+The historical filename remains a compatibility launcher:
 
 ```bash
 python HW1.py demo --output artifacts/demo
@@ -60,14 +77,14 @@ python HW1.py demo --output artifacts/demo
 
 ## Artifact bundle
 
-| File | Contents |
+| Artifact | Purpose |
 |---|---|
-| `events.jsonl` | One explainable result per processed frame |
-| `summary.json` | Configuration, input metadata, timings, and observed track counts |
-| `annotated.mp4` | Bounding boxes, placard polygons, track IDs, and scores |
-| `preview.jpg` | Final annotated frame for fast review |
+| `events.jsonl` | one explainable record per processed frame |
+| `summary.json` | configuration, input metadata, timings and observed tracks |
+| `annotated.mp4` | accepted detections, polygons, track IDs and scores |
+| `preview.jpg` | final annotated frame for fast review |
 
-Each detection records its geometry and decision evidence:
+A HAZMAT detection contains the evidence used to accept it, for example:
 
 ```json
 {
@@ -84,8 +101,21 @@ Each detection records its geometry and decision evidence:
 }
 ```
 
-See [Architecture](docs/architecture.md), [JSON contract](docs/json-contract.md),
-and [Evaluation guide](docs/evaluation.md).
+The numbers above illustrate the schema, not a benchmark claim.
+
+## Detection architecture
+
+### HAZMAT placards
+
+Reference images are represented with SIFT keypoints/descriptors. Scene features are matched with a brute-force L2 matcher and Lowe ratio filtering. Candidate correspondences are passed to `findHomography(..., RANSAC)`. The transformed template polygon is then checked for sufficient inliers, plausible area, convexity, and scene bounds before acceptance.
+
+### Colored barrels
+
+Frames are converted to HSV and thresholded with explicit red/blue ranges. Morphological opening/closing suppresses noise; contour geometry and scale-aware area rules produce candidate barrels. The evidence object records the measurements behind each accepted candidate.
+
+### Tracking
+
+A lightweight centroid association layer persists semantic track IDs across frames using distance and disappearance limits. It is deliberately simpler than Kalman/Hungarian or learned trackers, making failure modes easy to inspect. Crossings and abrupt motion can still swap IDs.
 
 ## Configuration
 
@@ -99,16 +129,22 @@ crisis-vision analyze \
   --max-frames 500
 ```
 
-Unknown configuration keys and invalid ranges fail before video processing.
+Unknown keys and invalid ranges fail before video processing. Important controls include feature-match thresholds, RANSAC/inlier requirements, HSV ranges, contour-size rules, frame stride, and track association limits.
 
-## Template assets
+## Evaluation discipline
 
-The historical repository did not record where the bundled placard PNGs came from.
-They remain for backwards compatibility and demonstration, but their provenance and
-reuse rights must be verified before redistribution or commercial deployment. See
-[`ASSET_NOTICE.md`](ASSET_NOTICE.md). The code and documentation are MIT licensed.
+A useful evaluation needs labeled, representative footage. The repository therefore does not turn generated-demo counts into accuracy claims. A real benchmark should report at least:
 
-## Development
+- placard precision/recall by template class;
+- barrel precision/recall by color/class;
+- false positives per processed frame;
+- track fragmentation and ID switches;
+- sensitivity to blur, scale, illumination and occlusion;
+- threshold/configuration version used for the run.
+
+See `docs/evaluation.md` for the fuller protocol.
+
+## Development and CI
 
 ```bash
 pip install -e ".[dev]"
@@ -117,17 +153,19 @@ pytest
 crisis-vision demo --output artifacts/smoke --frames 24 --no-video
 ```
 
+CI runs lint/tests and the generated-data smoke path so the default branch can be checked without private footage.
+
 ## Known limitations
 
-- HSV barrels assume visible red or blue paint and relatively stable illumination.
-- SIFT matching needs enough texture and can fail under blur, glare, or heavy
-  occlusion.
-- Similar placards can compete when artwork shares strong local features.
-- Centroid association is deliberately simple and can swap IDs at crossings.
-- A deployment needs licensed templates, representative labeled footage, calibrated
-  thresholds, and human review.
+- SIFT requires sufficient local texture and degrades under severe blur/glare/occlusion.
+- Fixed HSV ranges remain camera/lighting sensitive.
+- Similar placards may share local features and compete during template matching.
+- Centroid tracking can swap identities at crossings or abrupt motion.
+- Generated demo success is an integration check, not evidence of field accuracy.
+- A deployment would require licensed templates, representative labeled data, calibrated thresholds and human review.
 
-## License
+## Template assets and license
 
-MIT for source code and documentation. Bundled image assets are excluded pending
-provenance verification.
+The historical repository did not record the provenance of all bundled placard PNGs. They remain for backwards compatibility/demo use, but reuse rights must be verified before redistribution or commercial deployment. See `ASSET_NOTICE.md`.
+
+Source code and documentation are MIT licensed; bundled image assets are excluded pending provenance verification.
