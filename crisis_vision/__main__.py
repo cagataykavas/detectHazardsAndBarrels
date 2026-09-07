@@ -1,5 +1,3 @@
-"""Backward-compatible command entry point."""
-
 from crisis_vision.cli import main
 
 if __name__ == "__main__":

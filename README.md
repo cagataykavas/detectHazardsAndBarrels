@@ -1,143 +1,171 @@
-# Hazard Sign & Barrel Detection / Tracking
+# Crisis Vision Lab — Hazard Sign & Barrel Detection / Tracking
 
-A classical computer-vision pipeline for detecting and tracking hazardous-material signs and colored barrels in video.
+[![CI](https://github.com/cagataykavas/detectHazardsAndBarrels/actions/workflows/ci.yml/badge.svg)](https://github.com/cagataykavas/detectHazardsAndBarrels/actions/workflows/ci.yml)
 
-The project combines **SIFT feature matching**, **homography estimation**, **HSV color segmentation**, **morphological filtering**, **contour analysis**, and lightweight **centroid-based tracking**. It also provides a live visualization panel for detected HAZMAT templates, confidence indicators, and cumulative detection counts.
+An explainable classical computer-vision pipeline for detecting hazardous-material placards and colored barrels in crisis-scene video. The repaired application packages the original academic prototype into a reproducible, headless pipeline with typed configuration, tracking, versioned JSONL evidence, tests, CI, and a deterministic generated demo.
 
-> This repository is an academic computer-vision project. It is preserved as an example of a feature-engineering / classical-CV approach rather than a modern deep-learning detector.
+The core techniques remain intentionally classical: **SIFT feature matching, Lowe ratio filtering, RANSAC homography validation, HSV segmentation, morphology, contour analysis, and centroid-based temporal association**. This repository is useful precisely because those stages are visible and inspectable rather than hidden behind a pretrained detector.
 
-## What the pipeline does
+> This is a portfolio/research baseline, not a certified safety system. It must not be the sole basis for emergency response or hazardous-material handling.
 
-Given an input video, the program:
+![Synthetic crisis-scene demo](docs/assets/demo-preview.jpg)
 
-1. Loads reference HAZMAT sign images from the `hazmats/` directory.
-2. Extracts SIFT keypoints and descriptors for each template.
-3. Processes video frames at a configurable interval.
-4. Searches the central region of each processed frame for matching HAZMAT signs.
-5. Uses Lowe's ratio test and RANSAC homography estimation to validate template matches.
-6. Detects red and blue barrels using HSV color thresholds and contour filtering.
-7. Associates detections across frames using centroid-distance tracking.
-8. Maintains counts for recognized HAZMAT signs.
-9. Displays the processed video alongside a template/status panel.
+_The preview is generated integration data, not operational footage._
 
-## Techniques demonstrated
+## Provenance
 
-- OpenCV video processing
-- SIFT feature extraction
-- Brute-force descriptor matching
-- Lowe ratio test
-- Homography estimation with RANSAC
-- Perspective transformation
-- HSV color-space segmentation
-- Morphological opening / closing
-- Contour extraction and area filtering
-- Otsu thresholding for ROI refinement
-- Centroid-based object association
-- Frame skipping for performance
-- Real-time visualization with OpenCV
+The project began as a university assignment implemented in one large `HW1.py`. The original behavior is preserved in `legacy/HW1_monolith.py` together with the historical assignment notes. The runnable application does **not** import the legacy monolith; it re-expresses the same problem as testable modules.
 
-## Repository structure
+This matters because several thresholds in the original project were tuned for assignment footage rather than calibrated as universal detection rules. The modernized pipeline makes those assumptions explicit instead of presenting them as production-grade probabilities.
+
+## What the repaired pipeline does
+
+1. Loads HAZMAT reference templates and extracts SIFT descriptors.
+2. Reads video frames through a headless processing pipeline.
+3. Matches scene descriptors to templates using Lowe's ratio criterion.
+4. Estimates a homography with RANSAC and rejects weak or implausible geometry.
+5. Detects red and blue barrels with scale-aware HSV masks, morphology, and contours.
+6. Associates detections across frames with lightweight centroid tracking.
+7. Emits per-frame JSONL records containing geometry, track IDs, scores, and decision evidence.
+8. Writes an annotated video, preview frame, and machine-readable summary.
+
+Confidence values are heuristic ranking scores, **not calibrated probabilities**. Detection counts are observations, **not precision/recall**.
+
+## Engineering surface
 
 ```text
-detectHazardsAndBarrels/
-├── HW1.py              # Detection, tracking and visualization pipeline
-├── hazmats/            # Reference HAZMAT sign images
-├── requirements.txt    # Python dependencies
-├── ReadMe.txt           # Original assignment notes
-└── README.md            # Project documentation
+crisis_vision/
+  cli.py          command-line interface
+  config.py       typed/validated configuration
+  detection.py    barrel + placard detection primitives
+  tracking.py     temporal centroid association
+  pipeline.py     video orchestration and artifact writing
+  models.py       result/evidence data contracts
+  templates.py    reference-template loading
+  demo.py         deterministic synthetic integration scene
+legacy/
+  HW1_monolith.py preserved original academic implementation
+tests/            detection, tracking, config and pipeline regression tests
+docs/             architecture, JSON contract and evaluation guidance
 ```
 
-The input video is expected as `video.mp4` in the project directory, as described by the original assignment notes.
-
-## Installation
-
-Python 3 is required.
+## Quick start
 
 ```bash
 python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+
+# Zero-private-data integration path
+crisis-vision demo --output artifacts/demo --frames 48
+
+# Analyze a recording
+crisis-vision analyze \
+  --input video.mp4 \
+  --templates hazmats/hazmats \
+  --output artifacts/incident
+
+# Inspect the output contract
+crisis-vision explain-schema
 ```
 
-Activate the environment, then install the dependencies:
+The historical filename remains a compatibility launcher:
 
 ```bash
-pip install -r requirements.txt
+python HW1.py demo --output artifacts/demo
 ```
 
-## Input data
+## Artifact bundle
 
-Place the video to be processed in the repository root:
+| Artifact | Purpose |
+|---|---|
+| `events.jsonl` | one explainable record per processed frame |
+| `summary.json` | configuration, input metadata, timings and observed tracks |
+| `annotated.mp4` | accepted detections, polygons, track IDs and scores |
+| `preview.jpg` | final annotated frame for fast review |
 
-```text
-video.mp4
+A HAZMAT detection contains the evidence used to accept it, for example:
+
+```json
+{
+  "track_id": "hazmat_flammable-solid_1",
+  "label": "flammable-solid",
+  "kind": "hazmat",
+  "confidence": 0.86,
+  "evidence": {
+    "decision_rule": "sift_ratio_plus_ransac",
+    "good_matches": 42,
+    "inlier_ratio": 0.79,
+    "polygon_area_ratio": 0.051
+  }
+}
 ```
 
-Reference HAZMAT images should be PNG files inside the template directory used by the script:
-
-```text
-hazmats/
-└── hazmats/
-    ├── <template-1>.png
-    ├── <template-2>.png
-    └── ...
-```
-
-The filename (without `.png`) is used as the object/template name.
-
-## Running
-
-```bash
-python HW1.py
-```
-
-The application opens an OpenCV window containing the processed video and a HAZMAT status panel.
+The numbers above illustrate the schema, not a benchmark claim.
 
 ## Detection architecture
 
-### HAZMAT signs
+### HAZMAT placards
 
-Each reference sign is represented using SIFT descriptors. Scene descriptors are matched against the templates using a brute-force L2 matcher followed by Lowe's ratio test.
+Reference images are represented with SIFT keypoints/descriptors. Scene features are matched with a brute-force L2 matcher and Lowe ratio filtering. Candidate correspondences are passed to `findHomography(..., RANSAC)`. The transformed template polygon is then checked for sufficient inliers, plausible area, convexity, and scene bounds before acceptance.
 
-When enough good matches are available, the corresponding template points and scene points are used to estimate a homography with RANSAC. The transformed template boundary is then subjected to geometric checks before being accepted as a detection.
+### Colored barrels
 
-The implementation also performs segmentation within the detected region to refine the object's visible contour.
-
-### Barrels
-
-Barrels are detected independently using color information. Frames are converted from BGR to HSV and thresholded for red and blue regions. Morphological filtering suppresses small artifacts, after which sufficiently large contours become barrel detections.
+Frames are converted to HSV and thresholded with explicit red/blue ranges. Morphological opening/closing suppresses noise; contour geometry and scale-aware area rules produce candidate barrels. The evidence object records the measurements behind each accepted candidate.
 
 ### Tracking
 
-The project uses a lightweight tracking strategy based primarily on centroid proximity and disappearance counters. This avoids requiring a dedicated tracking model while demonstrating basic multi-frame object association.
+A lightweight centroid association layer persists semantic track IDs across frames using distance and disappearance limits. It is deliberately simpler than Kalman/Hungarian or learned trackers, making failure modes easy to inspect. Crossings and abrupt motion can still swap IDs.
 
-## Important configuration values
+## Configuration
 
-Several thresholds are intentionally exposed near the top of `HW1.py`, including:
+```bash
+cp config.example.json my-config.json
+crisis-vision analyze \
+  --input video.mp4 \
+  --templates hazmats/hazmats \
+  --config my-config.json \
+  --output artifacts/incident \
+  --max-frames 500
+```
 
-- minimum feature-match count
-- frame-skip interval
-- object disappearance threshold
-- centroid recognition distance
-- visualization grid dimensions
+Unknown keys and invalid ranges fail before video processing. Important controls include feature-match thresholds, RANSAC/inlier requirements, HSV ranges, contour-size rules, frame stride, and track association limits.
 
-The barrel detector also contains class-specific contour-area thresholds and HSV ranges.
+## Evaluation discipline
 
-These values were tuned for the assignment footage rather than designed as universal detection parameters.
+A useful evaluation needs labeled, representative footage. The repository therefore does not turn generated-demo counts into accuracy claims. A real benchmark should report at least:
 
-## Limitations
+- placard precision/recall by template class;
+- barrel precision/recall by color/class;
+- false positives per processed frame;
+- track fragmentation and ID switches;
+- sensitivity to blur, scale, illumination and occlusion;
+- threshold/configuration version used for the run.
 
-This is a handcrafted CV pipeline, so performance is sensitive to the visual conditions of the input video.
+See `docs/evaluation.md` for the fuller protocol.
 
-In particular:
+## Development and CI
 
-- SIFT matching can deteriorate under severe blur, occlusion, or weak texture.
-- Fixed HSV thresholds depend on lighting and camera characteristics.
-- Fixed contour-area thresholds depend on scale and camera distance.
-- Centroid association can confuse objects that cross or move abruptly.
-- Several geometric and matching thresholds are dataset-specific.
-- The system is not intended as a safety-certified hazard-recognition system.
+```bash
+pip install -e ".[dev]"
+ruff check .
+pytest
+crisis-vision demo --output artifacts/smoke --frames 24 --no-video
+```
 
-A modern extension could replace the handcrafted detection stages with a trained object detector while retaining this repository as a useful classical-CV baseline.
+CI runs lint/tests and the generated-data smoke path so the default branch can be checked without private footage.
 
-## Why this project is useful
+## Known limitations
 
-The project demonstrates an end-to-end computer-vision workflow without relying on a pretrained neural detector: feature extraction, matching, geometric verification, segmentation, object association, counting, and video visualization are implemented explicitly with NumPy and OpenCV.
+- SIFT requires sufficient local texture and degrades under severe blur/glare/occlusion.
+- Fixed HSV ranges remain camera/lighting sensitive.
+- Similar placards may share local features and compete during template matching.
+- Centroid tracking can swap identities at crossings or abrupt motion.
+- Generated demo success is an integration check, not evidence of field accuracy.
+- A deployment would require licensed templates, representative labeled data, calibrated thresholds and human review.
+
+## Template assets and license
+
+The historical repository did not record the provenance of all bundled placard PNGs. They remain for backwards compatibility/demo use, but reuse rights must be verified before redistribution or commercial deployment. See `ASSET_NOTICE.md`.
+
+Source code and documentation are MIT licensed; bundled image assets are excluded pending provenance verification.
