@@ -28,3 +28,5 @@ jobs:
         run: pytest
       - name: Exercise headless integration demo
         run: crisis-vision demo --output /tmp/crisis-demo --frames 8 --no-video
+      - name: Audit emitted track stability
+        run: crisis-vision audit-tracks --events /tmp/crisis-demo/events.jsonl --require-pass

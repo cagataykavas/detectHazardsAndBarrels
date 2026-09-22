@@ -38,6 +38,33 @@ For homography quality, also report corner reprojection error. For tracking, rep
 switches and track fragmentation. Include confidence intervals or bootstrap intervals
 when sample counts are small.
 
+## Temporal consistency preflight
+
+Before scoring against labels, the emitted evidence can be checked for internal track
+stability:
+
+```bash
+crisis-vision audit-tracks \
+  --events artifacts/incident/events.jsonl \
+  --min-observations 3 \
+  --max-frame-gap 8 \
+  --min-mean-confidence 0.45 \
+  --max-confidence-drop 0.35 \
+  --max-normalized-speed-per-frame 0.12 \
+  --require-pass > artifacts/incident/track-stability.json
+```
+
+Exit code `0` means the artifact passed (or no gate was requested), `3` means a valid
+artifact violated at least one configured threshold, and `2` means the artifact or
+policy was malformed. Store the report beside the run configuration so reviewers can
+reproduce the decision.
+
+This preflight is deliberately not an ID-switch metric: without labeled object
+identities it cannot know whether a stable-looking track follows the correct object.
+Normalized speed is also affected by camera motion, perspective, sampling stride, and
+frame rate. Calibrate every threshold on representative validation recordings and use
+labeled MOT-style evaluation for release claims.
+
 ## Threshold selection
 
 Tune HSV, ratio-test, RANSAC, and tracking thresholds only on training/validation data.

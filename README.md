@@ -67,6 +67,11 @@ crisis-vision analyze \
 
 # Inspect the output contract
 crisis-vision explain-schema
+
+# Gate the temporal reliability of emitted tracks
+crisis-vision audit-tracks \
+  --events artifacts/incident/events.jsonl \
+  --require-pass
 ```
 
 The historical filename remains a compatibility launcher:
@@ -144,6 +149,20 @@ A useful evaluation needs labeled, representative footage. The repository theref
 
 See `docs/evaluation.md` for the fuller protocol.
 
+### Track-stability gate
+
+`audit-tracks` validates the temporal evidence already written to `events.jsonl`. For
+each track it checks observation count, source-frame gaps, mean confidence, abrupt
+confidence drops, normalized centroid speed, immutable label/kind identity, and the
+`first_observation` lifecycle. The output is a deterministic JSON report with
+track-level measurements and machine-readable reason codes. With `--require-pass`, a
+well-formed policy violation exits with code `3`; malformed evidence or policy exits
+with code `2`.
+
+Thresholds are configurable on the command line and should be frozen using a labeled
+validation split. A passing report is evidence of internal temporal consistency, not
+proof that a track corresponds to the correct physical object.
+
 ## Development and CI
 
 ```bash
@@ -161,6 +180,8 @@ CI runs lint/tests and the generated-data smoke path so the default branch can b
 - Fixed HSV ranges remain camera/lighting sensitive.
 - Similar placards may share local features and compete during template matching.
 - Centroid tracking can swap identities at crossings or abrupt motion.
+- The track audit cannot observe ground-truth ID switches or distinguish real motion
+  from camera motion; thresholds are scene- and frame-rate-dependent.
 - Generated demo success is an integration check, not evidence of field accuracy.
 - A deployment would require licensed templates, representative labeled data, calibrated thresholds and human review.
 
