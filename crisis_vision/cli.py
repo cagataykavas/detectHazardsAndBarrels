@@ -12,6 +12,11 @@ from typing import Any
 from crisis_vision.config import CrisisConfig
 from crisis_vision.demo import generate_synthetic_frames
 from crisis_vision.pipeline import analyze_frames, analyze_video
+from crisis_vision.track_stability import (
+    TrackAuditInputError,
+    TrackStabilityPolicy,
+    audit_track_stability,
+)
 
 DEFAULT_TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "hazmats" / "hazmats"
 
@@ -65,6 +70,21 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--config", type=Path)
     demo.add_argument("--no-video", action="store_true")
 
+    audit = subparsers.add_parser(
+        "audit-tracks", help="audit temporal stability in an events.jsonl artifact"
+    )
+    audit.add_argument("--events", required=True, type=Path)
+    audit.add_argument("--min-observations", type=int, default=3)
+    audit.add_argument("--max-frame-gap", type=int, default=8)
+    audit.add_argument("--min-mean-confidence", type=float, default=0.45)
+    audit.add_argument("--max-confidence-drop", type=float, default=0.35)
+    audit.add_argument("--max-normalized-speed-per-frame", type=float, default=0.12)
+    audit.add_argument(
+        "--require-pass",
+        action="store_true",
+        help="return exit code 3 when a valid artifact violates the policy",
+    )
+
     subparsers.add_parser("explain-schema", help="print the JSON event contract")
     return parser
 
@@ -75,12 +95,45 @@ def _load_config(path: Path | None) -> CrisisConfig:
     return config
 
 
+def _load_events(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        raise FileNotFoundError(f"Event artifact does not exist: {path}")
+    events: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                raise TrackAuditInputError(f"events.jsonl line {line_number} is empty")
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise TrackAuditInputError(
+                    f"events.jsonl line {line_number} is not valid JSON"
+                ) from exc
+            if not isinstance(event, dict):
+                raise TrackAuditInputError(
+                    f"events.jsonl line {line_number} must contain an object"
+                )
+            events.append(event)
+    return events
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "explain-schema":
             print(json.dumps(json_contract(), indent=2, sort_keys=True))
             return 0
+        if args.command == "audit-tracks":
+            policy = TrackStabilityPolicy(
+                min_observations=args.min_observations,
+                max_frame_gap=args.max_frame_gap,
+                min_mean_confidence=args.min_mean_confidence,
+                max_confidence_drop=args.max_confidence_drop,
+                max_normalized_speed_per_frame=args.max_normalized_speed_per_frame,
+            )
+            report = audit_track_stability(_load_events(args.events), policy)
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 3 if args.require_pass and not report["passed"] else 0
         config = _load_config(args.config)
         if args.command == "analyze":
             summary = analyze_video(
